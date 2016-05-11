@@ -164,7 +164,7 @@ To implement the data retrieval part we are going to use some exemplary well-ann
 
 First, the most basic problem is that how to measure the similarity between the information with such different nature. Fortunately, the media files we can obtain often consist of both video and audio parts and even with some tag description, which will naturally provide us with the correlation information between video, audio and tags. Some websites also provide tags and categories for videos, which can be introduced into our machine learning module as training dataset.
  
-Now we have designed 3 learning model for our machine learning part. As below, the first of them is fullly implemented, the others are partly implemented and not integrated into our database system.
+We designed and implemented 2 different learning model for the problem.
 
 1.Cluster Classifier Model:
 
@@ -174,23 +174,13 @@ We have implemented this model using GMM algorithm as the clusterer and the Logi
 Though this model is quite straight forwards, but it seems work well with the given dataset. We used this model to retrieve files from the database, then relevance result give by this model is quite reasonable in our perception. For the accurate performance of this algorithm, we will test it later.
 This model has a drawback that we can only return the similar videos and audios, while we cannot score the given data automatically with trained classifier. The two algorithm below don’t have such drawback.
 
-2.Score-to-feature Mapping In Reduced Space:
+2 CNN regression from feature to score
 
-The feature usually take several thousands dimension to generate a audio or video file, while the dataset we are using is relatively small (less a hundred according to the requirement of the project) . With observation, we can reduce the features to a space with relatively small dimension while still can precisely represent the feature.
-In this model, we are expected to map a score criterion to a feature in reduced space. We can expect the more similar the feature is with respect to a feature mapped by a criterion, the higher the score it will get. So we can expect this model to score a give audio or video automatically with a given dataset already trained. 
-To solve the mapping equation from each score criterion to a feature vector, we design a error formula with respect to the mapped feature vector:
-$$\sum_{a\in F_a}(a - S_aU_a )^2 + \sum_{v\in F_v}(v - S_vU_v )^2 $$
-Where $F_a$ is all the features of audios and $F_v$ is all the features of videos, $U_a, U_v$ are the mapping matrix from score scriterion to the feature vector and $d$ is the dimension of score criteria. This model assume each features can be generalized as the linear mixtures by the features mapped each criterion and evaluate the residual the mapping equation preduces. With equation, we can solve it as a minimization problem to get the $U_a, U_v$ matrices.
-But the scores and the reduced feature usually differs in dimension and the $U_a, U_v$ are not guaranteed orthonormal, so we cannot directly get the scores with the trained set using linear algebra. We come up with a solution to that. First we find a criterion feature that have the most energy in the input feature, we can get energy by simply convolute the input feature with the criterion feature and normalize the result, we can assume the result is the score of the corresponding criterion. Then we get the score of the most significant criterion, then we can substract the criterion feature with respect to the score from the input feature and then repeat the procedure to get all the scores.
-The complexity of training phase is less than the cluster classify model, because all the computation is done in a reduced space. And the scoring phase is cheap because it takes square of score length multiply the reduced space dimension time, and we can expect score and reduced feature dimension are both several tens.
-We have implemented the spacing reduction space using Principal Component Analysis and the training phase using Newton’s method with scipy library, which reach convergence in less than a hundred iteration. While the scoring part has not been implemented.
-
-2.Unsupervised Score-to-feature Mapping In Reduced Space:
-This model goes fully unsupervised by utilizing the relationship between video and audio. First we reduce the feature to a lower dimension space as the algorithm above. Then the model will generate a score for each multimedia file in the database. 
-To generate the scores we use a similar error equation as above:
-$$\sum_{M\in F}(a_M - S_M )^2 + (v_M - S_M )^2 $$
-Where $S_M$ is the score for each multimedia and $a_M, v_M$ are the audio, video features in reduced space for the media. We want a balanced score for each multimedia. This equation can be directly solved. And with this score, we then use a regression algorithm to map features to the scores.
-The scoring phase has been implemented. For the mapping phase, we are testing different algorithm including Artifical Neural Network and ridge regression, which work well with ill-posed problem.
+In the prototype we mention that we are trying to use a regression model to map features to scores. After some dicussions and tests, we found that traditional statistical method can hardly make a good regression of this problem. So we decide to use CNN to do the non-linear regression.
+The CNN is a multi-layer model which map the input features to different features at each layer. The convolution and pooling can efficient uitilize the locality structure of the features, which is suitable for the histogram per frame features we are using. The convolution and pooling layer can abstract the features within some frames. And because the parameters are shared within all neurons within a layer, so the CNN model can extract time offset invariant and temporal sequence information preserved feature with that two layers. The inner product layers at the end of CNN pipe line is fully connected layers which abstract all features extracted by convolution and pooling layers, and finally map the features to scores. So the CNN model seems well satisty the problem.
+For the CNN, we use a leNet MNIST model to train the features. Features of different fequency bins (for audio) or different color histogram bins (for videos) are treated as different channels in the CNN training model. And features are convoluted and pooled in temporal axis. For the loss calculation for CNN we use Euclidean distance between the last inner production layer and the scores, so the output of the last inner production layer will be the prediction for the video or the audio script. The CNN pipeline can be illustrate as:
+	data -> convolution -> pooling -> convolution -> pooling -> inner production -> inner production -> loss.
+This pipeline is implemented using Caffe with GPU acceleration. From our experiment, the CNN model will converge after 2000 iterations, so the training process can be done extremely fast with GPU acceleration.
 
 
 \chapter{Performance Measurements}
