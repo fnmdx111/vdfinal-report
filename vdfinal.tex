@@ -7,6 +7,7 @@
 \usepackage{pdfpages}
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage{amssymb}
 \usepackage[top=1.5in, bottom=1.5in, left=1.5in, right=1.5in]{geometry}
 
 \title{Final Report: A Multimedia Information Retrieval Database System}
@@ -23,6 +24,8 @@ In this document, we would like to elaborate on a multimedia information retriev
 Typical visual database requires users to be familiar with the query system of their own, i.e., they have their own language for query. However, in this system we proposed, users will query in the database with an audio file (e.g. MP3 or OGG) as input for video clips that fits the input than other. Users can also do the query vice versa. Then the system will use various visual/acoustic features and some interconnections between them, along with a machine learning process, to try to identify queried subjects. More on how such retrieval is done will be explained later in this proposal.
 
 When it comes to database population, one way is to evaluate the style of videos and audio and to score each of the objects according to multiple criteria, such as ``adorable'', or ``psychedelic''. The scores will be in a range of $0.0$ to $1.0$. In other words, each object will receive a vector of scores. A machine learning process will be used to fit these scores to the extracted features.
+
+We will discuss the evalution of the system in Chapter \ref{ch:eval}.
 
 \section{Typical Use Cases}
 
@@ -62,7 +65,14 @@ The general workflows are depicted as follows\footnote{These two figures have be
   \label{fig:qwf}
 \end{figure}
 
-The above figure depicts that users are allowed to query using audio/video files or score vectors.
+The above figure depicts that users are allowed to query using audio/video files or score vectors. When the user queries the database using audio or video clips, their features were extracted and put into the Convoluted Neural Network to get the predicted score vectors, which then were compared against the scores from users using the formula:
+
+\begin{equation}
+\label{eq:confidence}
+confidence = 1 - {\sum_{i=1}^{8} (P_i - Q_i)^2 \over 8}
+\end{equation}
+
+The user can also find clips directly by supplying scores, in which case the system will traverse the database and find the top 20 multimedia clips ordered by descending confidence.
 
 \begin{figure}[H]
   \centering
@@ -81,7 +91,7 @@ The development environment is:
 \begin{itemize}
   \item Machine: 2 high-end Windows laptops, 1 13’’ Macbook Pro
   \item Operating Systems: Windows 10, Ubuntu and Mac OS X
-  \item Primarily involved software: Python 3.5, OpenCV 3.1.0, librosa 0.4.2, Pyramid 1.6.1, React.js, etc. (secondary dependencies not listed)
+  \item Primarily involved software: Python 3.5, NumPy 1.10, OpenCV 3.1.0, Caffe, librosa 0.4.2, Pyramid 1.6.1, React.js, etc. (secondary dependencies not listed)
   \item Additionally involved hardware: none
   \item IDE: PyCharm 2016.01, WebStorm 2016.01, Visual Studio 2015
 \end{itemize}
@@ -92,27 +102,28 @@ The system is implemented as a Browser-Server (B/S) application, utilizing the u
 
 \subsection{RESTful API}
 
-Then system currently supports three RESTful APIs:
-\begin{itemize}
-\item Heterogeneous Query: querying video clips with audio clips and vice versa. When dealing with this kind of requests, the system invokes feature extraction functions on the received query subject (a file object), and use the machine learning model (currently logistic regression) to predict it's possibility vector (or PV for short).
+Then system currently supports the following RESTful APIs:
+\begin{description}
+\item[Heterogeneous Query] Queries video clips with audio clips and vice versa. When dealing with this kind of requests, the system invokes feature extraction functions on the received query subject (a file object), and uses the machine learning model to predict it's score vector.
 
-After the system procured the PV, it traverses the database, calculates and sorts the database objects by the cosine distance between the PV of the subject and the ones of the objects. Finally it replies with the sorted result set to the frontend which displays the result set in a grid.
+After procuring the score vector, the system traverses the database, calculates and sorts the database objects by formula \ref{eq:confidence} between the score vector of the subject and the ones of the objects. Finally it replies with the sorted result set to the frontend which then displays the result set in a grid.
 
-\item Homogeneous Query: roughly the same as heterogeneous query, only that the system allows user to query objects using subjects of the same type.
+\item[Homogeneous Query] Roughly the same as heterogeneous query, only that the system allows user to query objects using subjects of the same type.
 
-\item Score vector query: user posts a score vector to the server to query something that relates to the posted score vector closely.
+\item[Score Vector Query] Posts a score vector to the server to query something that relates to the posted score vector closely.
 
-Note that the API for database population is removed. We realized that it is very inefficient to re-train the machine learning module very time the user uploads something new to the database. The system administrator could use the script to batch insert new clips to the database and re-train the machine learning model.
+\item[Upload] Allows the user to score and upload multiple multimedia files. The system will train (or refine) the machine learning module automatically. Because extracted features are saved in the database, so if the user uploads a clip with the title-artist pair already in the database, the features won't be extracted again, but the score vector be averaged and the machine learning module be refined.
 
-\end{itemize}
+\end{description}
+
 
 \subsection{Graphic User Interface}
 
-The user interface is a browser-side standalone \textit{React.js} application. It is different from traditional frontend application in that it leverages the full power of Javascript to manipulate DOM node such that everything the user sees is rendered at client-side. This relieves the backend server of rendering complicated static HTML and wasting the computational power of the server machine.
+The user interface is a browser-side standalone \textit{React.js} application. It is different from traditional frontend application in that it leverages the full power of Javascript\footnote{Although the source code of the frontend application is written in CoffeeScript.} to manipulate DOM node such that everything the user sees is rendered at client-side. This relieves the backend server of rendering complicated static HTML and wasting the computational power of the server machine.
 
-The graphic user interface of the system is divided into two views. The first one is the Query View, where the user queries for multimedia clips with the file he/she dragged into the dropzone, or the score vector he/she proposed. The result of such query is displayed in grid, sorted by descending confidence (cosine distance).
+The graphic user interface of the system is divided into two views. The first one is the Query View, where the user queries for multimedia clips with the file he/she dragged into the dropzone, or the score vector he/she proposed. The result of such query is displayed in a grid, sorted by descending confidence. The header of the grid items will change color according to the confidence: green for $confidence \geqslant 0.667$, orange for $0.667 > confidence \geqslant 0.333$ and gray for $0.333 > confidence$.
 
-The second view is the Upload View, where the user drags multiple multimeida clips into the dropzone and scores each the clips according to 8 criteria (which are \textit{Psychedelic}, \textit{Vibrant}, \textit{Happy}, \textit{Adorable}, \textit{Gloomy}, \textit{Energetic}, \textit{Romantic}, and \textit{Violent}). When the user hits \textit{Submit}, all these information will go to the server and saved into database.
+The second view is the Upload View, where the user drags multiple multimeida clips into the dropzone and scores each of the clips according to 8 criteria (which are \textit{Psychedelic}, \textit{Vibrant}, \textit{Happy}, \textit{Adorable}, \textit{Gloomy}, \textit{Energetic}, \textit{Romantic}, and \textit{Violent}). When the user hits \textit{Submit}, all these information will go to the server and be saved into database.
 
 \section{Feature Extraction Module}
 
@@ -173,30 +184,43 @@ First, the most basic problem is that how to measure the similarity between the 
  
 We designed and implemented 2 different learning model for the problem.
 
-1.Cluster Classifier Model:
+\subsection{Cluster Classifier Model}
 
-This model frist learn from the score information we have annotated to the video and audio clips. First we cluster those score information with score clustering algorithm into several clusters. Then we know which cluster each audio file or video file belongs to. Then we classify the audio or video file to the cluster they belong to and train their features with classify machine. Then we can get a classify machine which can generate the probability a video or audio file belongs to each of the clusters with the feature of the file as the input. With the classify machine, we reduce each feature to a probability vector of a small demension. To compare the video and audio files we can compare their generated probability vector. 
-For the complexity of the algorithm, the training part complexity is large. The computational efforts is mainly done to train the classify machine, we can expect the training process will take O((dataset size)*(feature dimension)*(iteration times)). Generally speaking the feature demension is several thousands and the iteration times is over 100 to achieve a good convergence of the classify machine. But this complexity is acceptable because the training process is done offline. With classify machine trained we can get the probability vector in linear time with respect to the dimension of the feature.
-We have implemented this model using GMM algorithm as the clusterer and the Logistic Regression algorithm as the classify machine. Implemented with sklearn library.
-Though this model is quite straight forwards, but it seems work well with the given dataset. We used this model to retrieve files from the database, then relevance result give by this model is quite reasonable in our perception. For the accurate performance of this algorithm, we will test it later.
-This model has a drawback that we can only return the similar videos and audios, while we cannot score the given data automatically with trained classifier. The two algorithm below don’t have such drawback.
+This model learns from the score information we have annotated to the video and audio clips.
 
-2 CNN regression from feature to score
+First we cluster those score information into several clusters with clustering algorithm. Then we know which cluster each audio file or video file belongs to. After this, we classify the audio or video file to the cluster they belong to and train their features with the classification machine. We can get a classification machine which generates the probability of a video or audio clip belonging to each of the clusters with the extracted features of the files as the input. With the classification machine, we reduce each feature to a probability vector of a small demension. To compare the distance of the video and audio clips, we can compare their generated probability vector. 
 
-In the prototype we mention that we are trying to use a regression model to map features to scores. After some dicussions and tests, we found that traditional statistical method can hardly make a good regression of this problem. So we decide to use CNN to do the non-linear regression.
-The CNN is a multi-layer model which map the input features to different features at each layer. The convolution and pooling can efficient uitilize the locality structure of the features, which is suitable for the histogram per frame features we are using. The convolution and pooling layer can abstract the features within some frames. And because the parameters are shared within all neurons within a layer, so the CNN model can extract time offset invariant and temporal sequence information preserved feature with that two layers. The inner product layers at the end of CNN pipe line is fully connected layers which abstract all features extracted by convolution and pooling layers, and finally map the features to scores. So the CNN model seems well satisty the problem.
-For the CNN, we use a leNet MNIST model to train the features. Features of different fequency bins (for audio) or different color histogram bins (for videos) are treated as different channels in the CNN training model. And features are convoluted and pooled in temporal axis. For the loss calculation for CNN we use Euclidean distance between the last inner production layer and the scores, so the output of the last inner production layer will be the prediction for the video or the audio script. The CNN pipeline can be illustrate as:
-	data -> convolution -> pooling -> convolution -> pooling -> inner production -> inner production -> loss.
+As for the complexity of the algorithm, we concluded that the complexity for the training part is large. The computational efforts are mainly done to train the classification machine. We can expect that the training process to take $O(size_{dataset} \times dimension_{feature} \times times_{iteration})$.
+
+Generally speaking, the feature demension should be several thousands and the iteration times be over 100 to achieve a good convergence of the classification machine. But this complexity is acceptable because the training process is done offline. With the classification machine trained, we can get the probability vector in linear time with respect to the dimension of the feature.
+
+We have implemented this model using GMM as the clustering algorithm and the Logistic Regression algorithm as the classification machine using the \textit{sklearn} library.
+
+Though this model is quite straight forward, it seems to work well with the given dataset. We used this model to retrieve files from the database, then relevance result give by this model is quite reasonable in our perception. We will test accurate performance of this algorithm later.
+
+This model has a drawback that we can only return similar video and audio clips, but fail to score the given data automatically with the trained classifier. The second algorithm described below doesn’t have such drawback.
+
+\subsection{CNN regression from feature to score}
+
+In the prototype we mentioned that we were trying to use a regression model to map features to scores. After some dicussions and tests, we found out that traditional statistical method can hardly make a good regression of this problem. So we decide to use CNN to do the non-linear regression.
+
+CNN is a multi-layer model which maps the input features to different features at each layer. The convolution and pooling can efficiently utilize the locality structure of the features, which is suitable for the histogram per frame features we are using. The convolution and pooling layer can abstract the features within some frames. And because the parameters are shared within all neurons of the same layer, the CNN model can extract features that preserve time offset invariant and temporal sequence information within that two layers. The inner product layers at the end of CNN pipe line are fully connected layers which abstract all features extracted by convolution and pooling layers, and finally map the features to scores. So the CNN model seems to satisfy the problem well.
+
+For the implementation of our CNN module, we used a leNet MNIST model to train the features. Features of different fequency bins (for audio) or different color histogram bins (for video) are treated as different channels in the CNN training model. And features are convoluted and pooled in temporal axis. For the loss calculation for CNN, we use Euclidean distance between the last inner production layer and the scores, so the output of the last inner production layer will be the prediction for the video or the audio clip.
+
+The CNN pipeline can be illustrate as: data $\rightarrow$ convolution $\rightarrow$ pooling $\rightarrow$ convolution $\rightarrow$ pooling $\rightarrow$ inner production $\rightarrow$ inner production $\rightarrow$ loss.
+
 This pipeline is implemented using Caffe with GPU acceleration. From our experiment, the CNN model will converge after 2000 iterations, so the training process can be done extremely fast with GPU acceleration.
 
 
 \chapter{Performance Measurements}
+\label{ch:eval}
 
 \section{Database Population}
 
-We have manually selected 40 2-minute video clips with audio from YouTube and stored them in local storage. We then used VLC to convert the video clips to audio clips, thus we now have 40 video clips and 40 audio clips. After this step, we randomly selected 20 video and audio clips\footnote{The audio clips are not necessarily from the same video clips.} (40 in total) to be put in the database. The other half to be queried by.
+We have manually selected 40 2-minute video clips with audio from YouTube and stored them in local storage. We then used \texttt{ffmpeg} to convert the video clips to audio clips, thus we now have 40 video clips and 40 audio clips. After this step, we randomly selected 20 video and audio clips\footnote{The audio clips are not necessarily from the same video clips.} (40 in total) to be put in the database. The other half to be queried by.
 
-The video and audio clips to be put into the database are annotated manually by one of the team members with one score vector each before actually put in the database.
+The video and audio clips to be put into the database are annotated manually by two of the team members with one score vector each before actually put in the database. One of the team members concentrates on annotating the audio clips, while the other scores only the video clips.
 
 We provide here two tables on the genres and the artists of the selected music:
 
@@ -249,6 +273,7 @@ The system queries a multimedia object by first extracting the features from the
 \item[Score vectors] A score vector is a vector of 8 floating-point numbers whose value lies in the range of $[0.0, 1.0]$. The eight dimensions of the score vector could affect the system in a way that the dimensions don't covers enough possible human emotions (goodness is harmed), or that they are not orthogonal so that the effectiveness is harmed. The score vector could also be affected by subjective scoring if there are few users choosing to score a clip, in which case goodness is harmed again.
 \item[Feature extraction] The features extracted from the clips could be not so representative that the features extracted are only partially useful and not all the aspects of the clips are considered. In this case, the goodness of the system is harmed. Or that too many features are extracted so that it takes too long to process a single clip, which slows down the performance of the system.
 \item[Database population] If there are too few clips in the database, or that they have roughly the same score vector so that the machine learning module is not trained enough, the query result could be less satifying, i.e. goodness is harmed.
+\item[Machine Learning] The parameters of the Convoluted Neural Network we used could have a great impact on the prediction of the score vectors of the queried subjects.
 \end{description}
 
 \subsection{Effectiveness}
